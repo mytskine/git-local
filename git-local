@@ -170,7 +170,7 @@ git-local
 
 git-local <git-command> [git-options]
 
-Uses a separate bare Git repository to track files
+Uses a separate Git repository to track files
 that the main repository should not track.
 Especially useful for versioning configuration files.
 Most git commands are just passed through, and a few are special:
@@ -244,29 +244,43 @@ bu git-local.
 
 Inside a git repository,
 
- $ git status --short
- ?? .gitignore
- ?? src/config/local.yml
+  $ git status --short
+  ?? src/config/local.yml
 
 create an overlapping, but purely local repository,
 
- $ git local init
- Initialized empty Git repository in /home/me/project/.git-local/
- $ git local status --short
- ## Tracked and modified files:
- 
- ## Untracked files that upstream ignores or does not track:
- .gitignore
- other
+  $ git local init
+  Initialized empty Git repository in /home/me/project/.git-local/
+  $ git local status --short
+  ## Tracked and modified files:
+  
+  ## Untracked files that upstream ignores or does not track:
+  src/config/local.yml
 
 where you can add files, commit, and use any git command:
 
- $ git local add src/config/local.yml
- $ git local commit -m "local config"
-[master (root-commit) 81aeaf5] 1
- 1 file changed, 0 insertions(+), 0 deletions(-)
- create mode 100644 other
- $ git local log --format=oneline
- 81aeaf5dd5b86fce443cc06cbb6e237aa7432241 local config
+  $ git local add src/config/local.yml
+  $ git local commit -m "local config"
+  [master (root-commit) 81aeaf5] 1
+  1 file changed, 0 insertions(+), 0 deletions(-)
+  create mode 100644 other
+  $ git local log --format=oneline
+  81aeaf5dd5b86fce443cc06cbb6e237aa7432241 local config
+
+The default behavior for the locally tracked files is to
+ignore them in the main repository:
+
+  $ git status
+  ?? .gitignore
+
+  $ git local status -v
+  ## Tracked files:
+  src/config/local.yml
+  
+  ## Tracked and modified files:
+  nothing to commit (use -u to show untracked files)
+  
+  ## Untracked files that upstream ignores or does not track:
+  .gitignore
 
 =cut
