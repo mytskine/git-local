@@ -29,8 +29,7 @@ $ git local status --short
 ## Tracked and modified files:
 
 ## Untracked files that upstream ignores or does not track:
-.gitignore
-other
+src/config/local.yml
 ```
 
 where you can add files, commit, and use any git command:
@@ -46,7 +45,8 @@ $ git local log --format=oneline
 ```
 
 The default behavior for the locally tracked files is to
-ignore them in the main repository:
+ignore them in the main repository.
+Here, the YAML file was added to the main `.gitignore`:
 
 ```sh
 $ git status

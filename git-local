@@ -274,7 +274,8 @@ where you can add files, commit, and use any git command:
   81aeaf5dd5b86fce443cc06cbb6e237aa7432241 local config
 
 The default behavior for the locally tracked files is to
-ignore them in the main repository:
+ignore them in the main repository.
+Here, the YAML file was added to the main `.gitignore`:
 
   $ git status
   ?? .gitignore
