@@ -53,15 +53,18 @@ for ($ARGV[0]) {
 	when ('status') {
 		shift @ARGV;
 		GetOptions($cmd_opts, "verbose|v");
+		require_local_repo();
 		local_status($cmd_opts, @ARGV);
 	}
 	when ('add') {
 		shift @ARGV;
 		$cmd_opts = { gitignore => 1 };
 		GetOptions($cmd_opts, "gitignore!");
+		require_local_repo();
 		local_add($cmd_opts, @ARGV);
 	}
 	default {
+		require_local_repo();
 		local_git(@ARGV);
 	}
 }
@@ -100,6 +103,13 @@ BEGIN {
 	sub ignore_files {
 		append_file("$worktree/.gitignore",  (map { "/" . $_} @_), "\n")
 			or die("Could not append to file!");
+	}
+
+	sub require_local_repo {
+		die(
+			"A git-local repository could not be found or read in\n    $localdir\n"
+			. "Consider using\n    git local init\n"
+		) unless -d -r -x $localdir;
 	}
 
 	sub local_status {
