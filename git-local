@@ -1,0 +1,272 @@
+#! /usr/bin/perl -w
+
+use v5.14;
+use strict;
+use warnings;
+
+# remove "experimental" warning in Perl >= 5.18
+no if $] >= 5.017011, warnings => 'experimental::smartmatch';
+
+use Getopt::Long qw(:config bundling);
+use Pod::Usage;
+use Cwd qw(abs_path);
+use File::Slurp;
+use File::Spec;
+
+use constant {
+	VERSION => 1,
+	LOCALDIRNAME => ".git-local",
+};
+
+# initialize options
+my %opts = (
+	verbose => 0,
+	debug => 0,
+);
+
+# Read command-line options
+Getopt::Long::Configure("pass_through");
+GetOptions(
+	\%opts,
+	"man", "help", "debug",
+	"git-dir", "work-tree",
+);
+
+# Print help thanks to Pod::Usage
+pod2usage({-verbose => 2}) if $opts{man};
+pod2usage({-verbose => 0}) if $opts{help} or !@ARGV;
+die("No joke!\n") if $opts{"git-dir"} or $opts{"work-tree"};
+
+# now starts the real app
+init_paths();
+
+for ($ARGV[0]) {
+	my $cmd_opts = {};
+	when ('init') {
+		shift @ARGV;
+		$cmd_opts = { gitignore => 1 };
+		GetOptions($cmd_opts, "gitignore!");
+		local_git(qw(init));
+		local_ignore_self();
+		ignore_self() if $cmd_opts->{gitignore};
+	}
+	when ('status') {
+		shift @ARGV;
+		GetOptions($cmd_opts, "verbose|v");
+		local_status($cmd_opts, @ARGV);
+	}
+	when ('add') {
+		shift @ARGV;
+		$cmd_opts = { gitignore => 1 };
+		GetOptions($cmd_opts, "gitignore!");
+		local_add($cmd_opts, @ARGV);
+	}
+	default {
+		local_git(@ARGV);
+	}
+}
+
+BEGIN {
+	my ($gitdir, $worktree, $localdir);
+
+	sub init_paths {
+		$gitdir = qx(git rev-parse --git-dir);
+		chomp $gitdir;
+		die("The git repository directory (usually .git/) was not found.\n") unless $gitdir;
+		$gitdir = abs_path($gitdir);
+		warn "gitdir: $gitdir\n" if $opts{debug};
+
+		$worktree = qx(git rev-parse --show-toplevel);
+		chomp $worktree;
+		die("The git repository top level was not found.\n") unless $worktree;
+		$worktree = abs_path($worktree);
+		warn "worktree: $worktree\n" if $opts{debug};
+
+		$localdir = abs_path(File::Spec->catdir($gitdir, File::Spec->updir(), LOCALDIRNAME));
+		warn "local-git-dir: $localdir\n" if $opts{debug};
+	}
+
+	sub local_ignore_self {
+		my $ignorepath = "$localdir/info";
+		mkdir($ignorepath) unless -e -d $ignorepath;
+		append_file("$localdir/info/exclude", "/" . File::Spec->abs2rel($localdir, $worktree) . "\n")
+			or die("Could not append to file!");
+	}
+
+	sub ignore_self {
+		ignore_files(File::Spec->abs2rel($localdir, $worktree));
+	}
+
+	sub ignore_files {
+		append_file("$worktree/.gitignore",  (map { "/" . $_} @_), "\n")
+			or die("Could not append to file!");
+	}
+
+	sub local_status {
+		my $o = shift;
+		my @files = grep { /^[^-]/ } @_; # TODO: better parsing (notably for "--")
+		if ($o->{verbose}) {
+			say "## Tracked files:";
+			local_git(qw(ls-files), @files);
+			print "\n";
+		}
+		say "## Tracked and modified files:";
+		local_git(qw(status --untracked-files=no), @_);
+		print "\n";
+		say "## Untracked files that upstream ignores or does not track:";
+		my %tracked = map { $_ => 1 } (shell_capture(cmd_local_git(qw(ls-files --cached), @files)));
+		say(grep { not $tracked{$_} }
+				(shell_capture(qw(git ls-files --others), "--exclude-from=$localdir/info/exclude", @files)));
+	}
+
+	sub local_add {
+		my $o = shift;
+		my @files = grep { /^[^-]/ } @_; # TODO: better parsing (notably for "--")
+		open(my $fh, "-|", (qw(git ls-files --others --directory --exclude-standard), @files))
+			or die "Can't run git: $!\n";
+		my @untracked_upstream = <$fh>;
+		close $fh;
+		chomp @untracked_upstream;
+		local_git("add", @untracked_upstream);
+		if ($o->{gitignore}) {
+			my %ignored_upstream = map
+				{ $_ => 1 }
+					(shell_capture(qw(git ls-files --ignored --directory --exclude-standard), @untracked_upstream));
+			ignore_files(grep { not $ignored_upstream{$_} } @untracked_upstream);
+		}
+	}
+
+	sub local_git {
+		my @options = ("git", "--git-dir=$localdir", "--work-tree=$worktree", @_);
+		warn "CMD: @options\n" if $opts{debug};
+		system(@options);
+	}
+
+	sub cmd_local_git {
+		my @options = ("git", "--git-dir=$localdir", "--work-tree=$worktree", @_);
+		warn "CMD: @options\n" if $opts{debug};
+		return @options;
+	}
+
+	sub shell_capture {
+		open(my $fh, "-|", @_)
+				or die "Can't run git: $!\n";
+		my @lines = <$fh>;
+		close $fh;
+		return @lines;
+	}
+}
+
+#################################################################
+
+
+__END__
+
+=head1 NAME
+
+git-local
+
+=head1 SYNOPSIS
+
+git-local <git-command> [git-options]
+
+Uses a separate bare Git repository to track files
+that the main repository should not track.
+Especially useful for versioning configuration files.
+Most git commands are just passed through, and a few are special:
+
+git local init
+
+git local status
+
+git local add
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-h, --help>
+
+Print a short help notice.
+
+=item B<--man>
+
+Print this man page.
+
+=back
+
+=head1 COMMANDS
+
+
+=head2 init
+
+Initialize a local repository in C<.git-local>, next to C<.git>.
+
+=over 8
+
+=item B<--no-gitignore>
+
+Do not create/update the C<.gitignore> file to hide the local repository.
+
+=back
+
+
+=head2 status
+
+With no option,
+lists files locally commited, or ignored upstream, or untracked upstream.
+To set a list of patterns to ignore, modify C<.git-local/info/exclude>.
+
+=over 8
+
+=item B<--verbose> B<-v>
+
+Display also the tracked and unchanged files.
+
+=back
+
+
+=head2 add
+
+The files tracked by the upstream repository will be ignored.
+
+=over 8
+
+=item B<--no-gitignore>
+
+Do not add lines in the upstream C<.gitignore> about the files tracked
+bu git-local.
+
+=back
+
+
+=head1 EXAMPLES
+
+Inside a git repository,
+
+ $ git status --short
+ ?? .gitignore
+ ?? src/config/local.yml
+
+create an overlapping, but purely local repository,
+
+ $ git local init
+ Initialized empty Git repository in /home/me/project/.git-local/
+ $ git local status --short
+ ## Tracked and modified files:
+ 
+ ## Untracked files that upstream ignores or does not track:
+ .gitignore
+ other
+
+where you can add files, commit, and use any git command:
+
+ $ git local add src/config/local.yml
+ $ git local commit -m "local config"
+[master (root-commit) 81aeaf5] 1
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ create mode 100644 other
+ $ git local log --format=oneline
+ 81aeaf5dd5b86fce443cc06cbb6e237aa7432241 local config
+
+=cut
