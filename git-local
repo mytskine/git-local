@@ -28,13 +28,13 @@ my %opts = (
 Getopt::Long::Configure("pass_through");
 GetOptions(
 	\%opts,
-	"man", "help", "debug",
+	"help", "debug",
 	"git-dir", "work-tree",
 );
 
 # Print help thanks to Pod::Usage
 pod2usage({-verbose => 2}) if $opts{man};
-pod2usage({-verbose => 0}) if $opts{help} or !@ARGV;
+pod2usage({-verbose => 0}) if !@ARGV;
 die("No joke!\n") if $opts{"git-dir"} or $opts{"work-tree"};
 
 # now starts the real app
@@ -187,11 +187,7 @@ git local add
 
 =item B<-h, --help>
 
-Print a short help notice.
-
-=item B<--man>
-
-Print this man page.
+Print this help page.
 
 =back
 
